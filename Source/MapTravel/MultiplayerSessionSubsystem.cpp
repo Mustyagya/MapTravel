@@ -47,6 +47,17 @@ void UMultiplayerSessionSubsystem::Initialize(FSubsystemCollectionBase& Collecti
 		// Создаём объект FName для хранения имени сессии, которое будет использовано в игре.
 		FName MySessionName = FName("Session name for Game");
 
+		FNamedOnlineSession* ExisteingSession = SessionInterface->GetNamedSession(MySessionName);//находим существующую сесию чтобы удалить
+
+		if (ExisteingSession)
+		{
+			FString Msg = FString::Printf(TEXT("Session with name %s alredy exists, destroying it"),*MySessionName.ToString());
+			PrintString(Msg);
+			SessionInterface->DestroySession(MySessionName);
+			return;
+
+		}
+
 		// Создаём настройки для новой сессии.
 		FOnlineSessionSettings SessionSettings;
 
@@ -101,6 +112,20 @@ void UMultiplayerSessionSubsystem::OnCreateSessionComplete(FName SessionName, bo
 	if (WasSuccessful)
 	{
 		GetWorld()->ServerTravel("/Game/ThirdPerson/Maps/ThirdPersonMap?listen");
+	}
+
+}
+
+void UMultiplayerSessionSubsystem::OnDestroySessionComplete(FName SessionName, bool WasSuccessful)
+{
+	//Zanovo sozdanie sesii
+	FString Msg = FString::Printf(TEXT("OnDestroySessionComplete, SessionName: %s, Success: %d"), *SessionName.ToString(), WasSuccessful);
+	PrintString(Msg);
+
+	if (CreateServerAfterDestroy)
+	{
+		CreateServerAfterDestroy = false;
+		CreateServer(DestroyServerName);
 	}
 
 }

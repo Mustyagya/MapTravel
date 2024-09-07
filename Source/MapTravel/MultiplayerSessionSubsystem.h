@@ -25,6 +25,10 @@ void CreateServer(FString ServerName);
 UFUNCTION(BlueprintCallable)
 void JoinServer(FString ServerName);
 
-//void OnCreateSessionComplete(FName SessionName, bool WasSuccessful);
 void OnCreateSessionComplete(FName SessionName, bool WasSuccessful);
+//повторное создание сессии после удаления
+void OnDestroySessionComplete(FName SessionName, bool WasSuccessful);
+bool CreateServerAfterDestroy;
+FString DestroyServerName;
+
 };
