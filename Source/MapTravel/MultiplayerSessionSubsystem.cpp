@@ -40,7 +40,7 @@ void UMultiplayerSessionSubsystem::Initialize(FSubsystemCollectionBase& Collecti
 					{
 						PrintString("Session interface is valid!");
 
-						
+						//делегат
 						SessionInterface->OnCreateSessionCompleteDelegates.AddUObject(this, &UMultiplayerSessionSubsystem::OnCreateSessionComplete);
 
 					}
