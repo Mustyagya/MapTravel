@@ -3,7 +3,10 @@
 
 #include "MultiplayerSessionSubsystem.h"
 #include "OnlineSubsystem.h"
-#include "OnlineSessionSettings.h"
+#include "Online/OnlineSessionNames.h"
+
+
+
 
 
 void PrintString(const FString& str)
@@ -39,15 +42,16 @@ void UMultiplayerSessionSubsystem::Initialize(FSubsystemCollectionBase& Collecti
 			// Получаем интерфейс сессий из подсистемы.
 			SessionInterface = OnlineSubsystem->GetSessionInterface();
 
-					// Проверяем, что интерфейс сессий действителен (не `nullptr`).
-					if (SessionInterface.IsValid())
-					{
-						PrintString("Session interface is valid!");
+			// Проверяем, что интерфейс сессий действителен (не `nullptr`).
+			if (SessionInterface.IsValid())
+			{
+			PrintString("Session interface is valid!");
 
-						//делегат
-						SessionInterface->OnCreateSessionCompleteDelegates.AddUObject(this, &UMultiplayerSessionSubsystem::OnCreateSessionComplete);
-						SessionInterface->OnDestroySessionCompleteDelegates.AddUObject(this, &UMultiplayerSessionSubsystem::OnDestroySessionComplete);
-					}
+			//делегат
+			SessionInterface->OnCreateSessionCompleteDelegates.AddUObject(this, &UMultiplayerSessionSubsystem::OnCreateSessionComplete);
+			SessionInterface->OnDestroySessionCompleteDelegates.AddUObject(this, &UMultiplayerSessionSubsystem::OnDestroySessionComplete);
+			SessionInterface->OnFindSessionsCompleteDelegates.AddUObject(this, &UMultiplayerSessionSubsystem::OnFindSessionsComplete);
+			}
 		
 	}
 }
@@ -89,7 +93,7 @@ void UMultiplayerSessionSubsystem::CreateServer(FString ServerName)
 	SessionSettings.bAllowJoinInProgress = true;// Разрешаем присоединение к сессии после её начала.
 	SessionSettings.bIsDedicated = false;// Устанавливаем, что это не выделенный сервер (игра будет работать и на клиенте).
 	SessionSettings.bShouldAdvertise = true;// Разрешаем рекламу сессии, чтобы её могли находить другие игроки.
-	SessionSettings.NumPrivateConnections = 2;// Задаём количество приватных подключений (2 частных слота).
+	SessionSettings.NumPublicConnections = 2;// Задаём количество приватных подключений (2 частных слота).
 	SessionSettings.bUseLobbiesIfAvailable = true;// Используем лобби, если оно доступно (например, для Steam-сессий).
 	SessionSettings.bUsesPresence = true;// Указываем, что сессия использует информацию о присутствии игроков (например, статус в Steam).
 	SessionSettings.bAllowJoinViaPresence = true;// Разрешаем игрокам присоединяться через систему присутствия (например, через список друзей).
@@ -110,8 +114,42 @@ void UMultiplayerSessionSubsystem::CreateServer(FString ServerName)
 void UMultiplayerSessionSubsystem::JoinServer(FString ServerName)
 {
 	PrintString("Join to Map!");
+	if (ServerName.IsEmpty())
+	{
+		PrintString("Server name cannot be empty!");
+		return;
+	}
+
+	SessionSearch = MakeShareable(new FOnlineSessionSearch());
+	bool IsLAN = false;
+	if (IOnlineSubsystem::Get()->GetSubsystemName() == "NULL")
+	{
+		IsLAN = true;
+	}
+
+	SessionSearch->bIsLanQuery = IsLAN;
+	SessionSearch->MaxSearchResults = 999999;
+	SessionSearch->QuerySettings.Set(SEARCH_PRESENCE, true, EOnlineComparisonOp::Equals);
+	SessionInterface->FindSessions(0, SessionSearch.ToSharedRef());
 
 	
+}
+
+void UMultiplayerSessionSubsystem::OnFindSessionsComplete(bool WasSuccessful)
+{
+	if (!WasSuccessful) return;
+
+	TArray<FOnlineSessionSearchResult> Results = SessionSearch->SearchResults;
+	if (Results.Num() > 0)
+	{
+		FString Msg = FString::Printf(TEXT("%d sessions found."), Results.Num());
+		PrintString(Msg);
+	}
+	else
+	{
+		PrintString("Zero sessions found.");
+	}
+
 }
 
 void UMultiplayerSessionSubsystem::OnCreateSessionComplete(FName SessionName, bool WasSuccessful)
@@ -138,5 +176,7 @@ void UMultiplayerSessionSubsystem::OnDestroySessionComplete(FName SessionName, b
 	}
 
 }
+
+
 
 
