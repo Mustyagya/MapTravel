@@ -16,6 +16,10 @@ void PrintString(const FString& str)
 UMultiplayerSessionSubsystem::UMultiplayerSessionSubsystem()
 {
 	//PrintString("MSS Constructor");
+
+	CreateServerAfterDestroy = false;
+	DestroyServerName = "";
+
 }
 
 void UMultiplayerSessionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -42,44 +46,9 @@ void UMultiplayerSessionSubsystem::Initialize(FSubsystemCollectionBase& Collecti
 
 						//делегат
 						SessionInterface->OnCreateSessionCompleteDelegates.AddUObject(this, &UMultiplayerSessionSubsystem::OnCreateSessionComplete);
-
+						SessionInterface->OnDestroySessionCompleteDelegates.AddUObject(this, &UMultiplayerSessionSubsystem::OnDestroySessionComplete);
 					}
-		// Создаём объект FName для хранения имени сессии, которое будет использовано в игре.
-		FName MySessionName = FName("Session name for Game");
-
-		FNamedOnlineSession* ExisteingSession = SessionInterface->GetNamedSession(MySessionName);//находим существующую сесию чтобы удалить
-
-		if (ExisteingSession)
-		{
-			FString Msg = FString::Printf(TEXT("Session with name %s alredy exists, destroying it"),*MySessionName.ToString());
-			PrintString(Msg);
-			SessionInterface->DestroySession(MySessionName);
-			return;
-
-		}
-
-		// Создаём настройки для новой сессии.
-		FOnlineSessionSettings SessionSettings;
-
-		SessionSettings.bAllowJoinInProgress = true;// Разрешаем присоединение к сессии после её начала.
-		SessionSettings.bIsDedicated = false;// Устанавливаем, что это не выделенный сервер (игра будет работать и на клиенте).
-		SessionSettings.bShouldAdvertise = true;// Разрешаем рекламу сессии, чтобы её могли находить другие игроки.
-		SessionSettings.NumPrivateConnections = 2;// Задаём количество приватных подключений (2 частных слота).
-		SessionSettings.bUseLobbiesIfAvailable = true;// Используем лобби, если оно доступно (например, для Steam-сессий).
-		SessionSettings.bUsesPresence = true;// Указываем, что сессия использует информацию о присутствии игроков (например, статус в Steam).
-		SessionSettings.bAllowJoinViaPresence = true;// Разрешаем игрокам присоединяться через систему присутствия (например, через список друзей).
-		bool IsLan = false;// Локальная переменная для хранения информации о том, является ли это LAN-сессией.
-
-
-		// Проверяем, используется ли локальная подсистема (например, NULL — это LAN-сессия).
-				if (IOnlineSubsystem::Get()->GetSubsystemName()=="NULL")
-				{
-					IsLan = true;
-				}
-		// Устанавливаем, что это LAN-сессия (если это локальная сеть).
-		SessionSettings.bIsLANMatch = IsLan;
-		// Создаём сессию с указанными параметрами: локальный игрок (index 0), имя сессии, и настройки сессии.
-		SessionInterface->CreateSession(0, MySessionName, SessionSettings);
+		
 	}
 }
 
@@ -96,6 +65,46 @@ void UMultiplayerSessionSubsystem::CreateServer(FString ServerName)
 		PrintString("Server Name can not bee empty");
 		return;
 	}
+
+	// Создаём объект FName для хранения имени сессии, которое будет использовано в игре.
+	FName MySessionName = FName("Session name for Game");
+
+	FNamedOnlineSession* ExisteingSession = SessionInterface->GetNamedSession(MySessionName);//находим существующую сесию чтобы удалить
+
+	if (ExisteingSession)
+	{
+		FString Msg = FString::Printf(TEXT("Session with name %s alredy exists, destroying it"), *MySessionName.ToString());
+		PrintString(Msg);
+
+		CreateServerAfterDestroy = true;
+		DestroyServerName = ServerName;
+		SessionInterface->DestroySession(MySessionName);
+		return;
+
+	}
+
+	// Создаём настройки для новой сессии.
+	FOnlineSessionSettings SessionSettings;
+
+	SessionSettings.bAllowJoinInProgress = true;// Разрешаем присоединение к сессии после её начала.
+	SessionSettings.bIsDedicated = false;// Устанавливаем, что это не выделенный сервер (игра будет работать и на клиенте).
+	SessionSettings.bShouldAdvertise = true;// Разрешаем рекламу сессии, чтобы её могли находить другие игроки.
+	SessionSettings.NumPrivateConnections = 2;// Задаём количество приватных подключений (2 частных слота).
+	SessionSettings.bUseLobbiesIfAvailable = true;// Используем лобби, если оно доступно (например, для Steam-сессий).
+	SessionSettings.bUsesPresence = true;// Указываем, что сессия использует информацию о присутствии игроков (например, статус в Steam).
+	SessionSettings.bAllowJoinViaPresence = true;// Разрешаем игрокам присоединяться через систему присутствия (например, через список друзей).
+	bool IsLan = false;// Локальная переменная для хранения информации о том, является ли это LAN-сессией.
+
+
+	// Проверяем, используется ли локальная подсистема (например, NULL — это LAN-сессия).
+	if (IOnlineSubsystem::Get()->GetSubsystemName() == "NULL")
+	{
+		IsLan = true;
+	}
+	// Устанавливаем, что это LAN-сессия (если это локальная сеть).
+	SessionSettings.bIsLANMatch = IsLan;
+	// Создаём сессию с указанными параметрами: локальный игрок (index 0), имя сессии, и настройки сессии.
+	SessionInterface->CreateSession(0, MySessionName, SessionSettings);
 }
 
 void UMultiplayerSessionSubsystem::JoinServer(FString ServerName)
