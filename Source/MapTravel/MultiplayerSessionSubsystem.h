@@ -18,8 +18,7 @@ class MAPTRAVEL_API UMultiplayerSessionSubsystem : public UGameInstanceSubsystem
 		UMultiplayerSessionSubsystem();
 		void Initialize(FSubsystemCollectionBase& Collection ) override;
 		void Deinitialize() override;
-
-		IOnlineSessionPtr SessionInterface;
+        IOnlineSessionPtr SessionInterface;
 UFUNCTION(BlueprintCallable)
 void CreateServer(FString ServerName);
 	
@@ -31,6 +30,10 @@ void OnCreateSessionComplete(FName SessionName, bool WasSuccessful);
 void OnDestroySessionComplete(FName SessionName, bool WasSuccessful);
 bool CreateServerAfterDestroy;
 FString DestroyServerName;
+FString ServerNameToFind;
+
+void OnJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result);
+FName MySessionName;
 
 void OnFindSessionsComplete(bool WasSuccessful);
 TSharedPtr<FOnlineSessionSearch> SessionSearch;
