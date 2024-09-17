@@ -38,4 +38,10 @@ FName MySessionName;
 void OnFindSessionsComplete(bool WasSuccessful);
 TSharedPtr<FOnlineSessionSearch> SessionSearch;
 
+//-----
+
+
+
+
+
 };

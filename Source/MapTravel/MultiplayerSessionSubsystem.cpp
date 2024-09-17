@@ -3,6 +3,9 @@
 
 #include "MultiplayerSessionSubsystem.h"
 #include "OnlineSubsystem.h"
+#include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
 #include "Online/OnlineSessionNames.h"//без нее не будет находить SEARCH_PRESENCE это случилось не давно в 5,2 такого не было
 
 
@@ -200,6 +203,7 @@ void UMultiplayerSessionSubsystem::OnFindSessionsComplete(bool WasSuccessful)
 	}
 
 }
+
 //присоединение у сесии
 void UMultiplayerSessionSubsystem::OnJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result)
 {
@@ -257,7 +261,5 @@ void UMultiplayerSessionSubsystem::OnDestroySessionComplete(FName SessionName, b
 	}
 
 }
-
-
 
 

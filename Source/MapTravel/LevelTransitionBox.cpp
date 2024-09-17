@@ -1,13 +1,14 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
-
 #include "LevelTransitionBox.h"
 #include "Components/BoxComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/Character.h"
 #include "Engine/Texture.h"
-// Sets default values
+#include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
+#include "OnlineSubsystem.h"
+#include "Interfaces/OnlineSessionInterface.h"
 
+// Sets default values
 ALevelTransitionBox::ALevelTransitionBox()
 {
     PrimaryActorTick.bCanEverTick = true;
@@ -23,159 +24,199 @@ ALevelTransitionBox::ALevelTransitionBox()
 void ALevelTransitionBox::BeginPlay()
 {
     Super::BeginPlay();
-    LevelName = "/Game/ThirdPerson/Maps/ThirdPersonMap1";
-     FirstMap = "/Game/ThirdPerson/Maps/ThirdPersonMap";  // Укажи путь к первой карте
-    // Подключение к сессии
-    IOnlineSubsystem* OnlineSubsystem = IOnlineSubsystem::Get();
-    if (OnlineSubsystem)
-    {
-        SessionInterface = OnlineSubsystem->GetSessionInterface();
-        if (SessionInterface.IsValid())
-        {
-            SessionInterface->OnCreateSessionCompleteDelegates.AddUObject(this, &ALevelTransitionBox::OnCreateSessionComplete);
-        }
-    }
-
-    CollisionBox->SetBoxExtent(BoxExtent);
+    LevelName = "/Game/ThirdPerson/Maps/ThirdPersonMap1";  // Путь к второй карте
+    FirstMap = "/Game/ThirdPerson/Maps/ThirdPersonMap";    // Путь к первой карте
 }
-
+void ALevelTransitionBox::Tick(float DeltaTime)
+{
+    Super::Tick(DeltaTime);
+}
 void ALevelTransitionBox::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
     if (OtherActor && OtherActor != this)
     {
         if (ACharacter* Character = Cast<ACharacter>(OtherActor))
         {
-            // Проверка, на какой карте игрок находится сейчас
             FString CurrentLevel = GetWorld()->GetMapName();
-
-            // Убираем префиксы уровня, чтобы получить чистое имя карты
             CurrentLevel.RemoveFromStart(GetWorld()->StreamingLevelsPrefix);
 
-            if (HasAuthority()) // Проверка, если это хост
+            // Изменение в проверке: проверяем роль сервера или клиента с помощью GetWorld()->IsServer()
+             //------------------------------------------------
+
+            if (GetNetMode() == NM_DedicatedServer || GetNetMode() == NM_ListenServer) // Проверка, если это сервер
             {
+
                 if (CurrentLevel == "ThirdPersonMap") // Если на первой карте
                 {
                     PrintString("Host is traveling to the second map...");
-                    HostTravelToNewMap();  // Переход на вторую карту
+                    /*HostTravelToNewMap();  // Переход на вторую карту*/
+                    GetWorld()->ServerTravel(LevelName + TEXT("?listen"));
                 }
                 else if (CurrentLevel == "ThirdPersonMap1") // Если на второй карте
                 {
                     PrintString("Host is returning to the first map...");
-                    ReturnToFirstMap();  // Возврат на первую карту
+                    /*ReturnToFirstMap();  // Возврат на первую карту*/
+                    GetWorld()->ServerTravel(LevelName + TEXT("?listen"));
                 }
             }
             else // Клиентская сторона
             {
-                if (CurrentLevel == "ThirdPersonMap") // Если на первой карте
+                APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+                if (PC && PC->IsLocalController()) // Проверка, что это локальный клиент
                 {
-                    PrintString("Client is traveling to the second map...");
-                    APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
-                    if (PC)
+                    if (CurrentLevel == "ThirdPersonMap") // Если на первой карте
                     {
+                        PrintString("Client is traveling to the second map...");
                         PC->ClientTravel(LevelName, TRAVEL_Absolute);  // Переход клиента на вторую карту
                     }
-                }
-                else if (CurrentLevel == "ThirdPersonMap1") // Если на второй карте
-                {
-                    PrintString("Client is returning to the first map...");
-                    APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
-                    if (PC)
+                    else if (CurrentLevel == "ThirdPersonMap1") // Если на второй карте
                     {
+                        PrintString("Client is returning to the first map...");
                         PC->ClientTravel(FirstMap, TRAVEL_Absolute);  // Возврат клиента на первую карту
                     }
                 }
             }
+            //------------------------------------------------
         }
     }
 }
-
-void ALevelTransitionBox::HostTravelToNewMap()
+//---------------------------------------------------------
+// Переход на новый уровень
+void ALevelTransitionBox::SwitchLevel(FString NewLevelName)
 {
-  
+    if (GetNetMode() == NM_DedicatedServer || GetNetMode() == NM_ListenServer)
+    {
+        GetWorld()->ServerTravel(NewLevelName + TEXT("?listen"));
+    }
+    else
+    {
+        APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(),0);
+        if (PC)
+        {
+            PC->ClientTravel(NewLevelName, TRAVEL_Absolute);
+        }
+    }
+}
+//---------------------------------------------------------
+// Выгрузка уровня
+void ALevelTransitionBox::UnloadLevel(FString UnloadLevelName)
+{
+}
+//---------------------------------------------------------
+// Сервер обновляет уровень игрока
+void ALevelTransitionBox::Server_UpdatePlayerLevel(const FString& ServerNewLevel)
+{
+    if (HasAuthority())
+    {
+        LevelName = ServerNewLevel;
+        Multicast_UpdatePlayerLevel(ServerNewLevel);// Вызов Multicast
+    }
+}
+//---------------------------------------------------------
+// Multicast для обновления уровня на всех клиентах
+void ALevelTransitionBox::Multicast_UpdatePlayerLevel(const FString& MulticasNewLevel)
+{
+    LevelName = MulticasNewLevel;
+}
+
+
+
+
+/*void ALevelTransitionBox::OfferClientToTravel(const FString& CurrentLevel)
+{
+    // Показываем клиенту UI с предложением перейти на другую карту
+    // Это место, где должен быть вызван пользовательский интерфейс для выбора перехода
+    if (CurrentLevel == "ThirdPersonMap") // На первой карте
+    {
+        PrintString("Offering client travel to the second map...");
+        ShowTravelUI(LevelName); // Вызываем UI для выбора перехода на вторую карту
+    }
+    else if (CurrentLevel == "ThirdPersonMap1") // На второй карте
+    {
+        PrintString("Offering client travel back to the first map...");
+        ShowTravelUI(FirstMap); // Вызываем UI для возврата на первую карту
+    }
+}*/
+
+/*void ALevelTransitionBox::ShowTravelUI(const FString& TargetMap)
+{
+    // Этот метод показывает UI, где клиент выбирает, хочет ли он переходить на новую карту
+    // Реализуется через UMG или другой механизм интерфейса
+    PrintString(FString::Printf(TEXT("Showing UI for client to travel to: %s"), *TargetMap));
+
+    // Если игрок соглашается, вызываем функцию для перехода:
+    // ClientTravelToNewMap(TargetMap);
+}*/
+
+/*void ALevelTransitionBox::ClientTravelToNewMap(const FString& TargetMap)
+{
+    APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+    if (PC)
+    {
+        PrintString(FString::Printf(TEXT("Client traveling to map: %s"), *TargetMap));
+        PC->ClientTravel(TargetMap, TRAVEL_Absolute); // Клиент переходит на указанную карту
+    }
+}*/
+
+/*void ALevelTransitionBox::HostTravelToNewMap()
+{
     if (!LevelName.IsEmpty())
     {
-        // Проверяем, является ли данный игрок хостом
-        if (HasAuthority())// Если хост
+        // Изменение в проверке: проверяем роль сервера с помощью GetWorld()->IsServer()
+        //------------------------------------------------
+        if (GetNetMode() == NM_DedicatedServer || GetNetMode() == NM_ListenServer) // Если это сервер
         {
-            // Переход хоста на новую карту с помощью ServerTravel
             PrintString("Server traveling to new map...");
-            GetWorld()->ServerTravel(LevelName + TEXT("?listen"));// Хост переходит на новую карту
+            GetWorld()->ServerTravel(LevelName + TEXT("?listen")); // Хост переходит на новую карту
         }
         else
         {
-            // Если это клиент, клиент переходит на новую карту самостоятельно
             APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
-            if (PC)
+            if (PC && PC->IsLocalController()) // Проверка, что это локальный клиент
             {
-                PrintString("Client trevel to new map!");
-                PC->ClientTravel(LevelName, TRAVEL_Absolute);// Клиент переходит на новую карту
+                PrintString("Client traveling to new map...");
+                PC->ClientTravel(LevelName, TRAVEL_Absolute); // Клиент переходит на новую карту
             }
         }
-        
+        //------------------------------------------------
     }
     else
     {
         PrintString("Level Name is empty. Cannot travel to new map.");
     }
-}
-
-void ALevelTransitionBox::OnCreateSessionComplete(FName SessionName, bool bWasSuccessful)
+}*/
+/*
+void ALevelTransitionBox::ReturnToFirstMap()
 {
-    if (bWasSuccessful)
+    if (!FirstMap.IsEmpty())
     {
-        PrintString(FString::Printf(TEXT("Session %s created successfully"), *SessionName.ToString()));
-
-        // Установим делегат для завершения перехода
-        if (SessionInterface.IsValid())
+        // Изменение: проверка на сервер через GetWorld()->IsServer()
+         //------------------------------------------------
+        if (GetNetMode() == NM_DedicatedServer || GetNetMode() == NM_ListenServer)  // Если это сервер
         {
-            // Делегат может оставаться для других целей, но не для перехода клиентов на другую карту
-            SessionInterface->OnSessionUserInviteAcceptedDelegates.AddUObject(this, &ALevelTransitionBox::OnTravelToMap);
-        }
-    }
-}
-// Функция вызывается, когда происходит попытка перехода на новую карту
-void ALevelTransitionBox::OnTravelToMap(bool bWasSuccessful, int32 ControllerId, FUniqueNetIdPtr UserId, const FOnlineSessionSearchResult& SearchResult)
-{
-   
-
-    if (bWasSuccessful)
-    {
-        PrintString("Map transition request received.");
-       
-
-        if (!LevelName.IsEmpty())
-        {
-            if (HasAuthority())//хотс переходит
-            {
-                PrintString("Host is Traveling to new map");
-                    // Клиенты переходят на ту же карту, что и хост
-                    UGameplayStatics::OpenLevel(GetWorld(), FName(LevelName), true);
-            }
-            else
-            {
-                APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(),0);
-                if (PC)
-                {
-                    PrintString("Client travel to the new map");
-                    PC->ClientTravel(LevelName, TRAVEL_Absolute);
-                }
-            }
+            PrintString("Returning to the first map...");
+            GetWorld()->ServerTravel(FirstMap + TEXT("?listen"));
         }
         else
         {
-            PrintString("Level Name is empty. Cannot travel to new map");
+            APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+            if (PC && PC->IsLocalController()) // Проверка, что это локальный клиент
+            {
+                PrintString("Client returning to the first map...");
+                PC->ClientTravel(FirstMap, TRAVEL_Absolute);
+            }
         }
+        //------------------------------------------------
     }
     else
     {
-        PrintString("Failed to transition to the new map.");
+        PrintString("First map name is empty. Cannot return to the first map.");
     }
 }
+*/
 
-void ALevelTransitionBox::Tick(float DeltaTime)
-{
-    Super::Tick(DeltaTime);
-}
+
+
 
 void ALevelTransitionBox::SetBoxExtent(FVector NewExtent)
 {
@@ -185,38 +226,24 @@ void ALevelTransitionBox::SetBoxExtent(FVector NewExtent)
         CollisionBox->SetBoxExtent(BoxExtent);
     }
 }
-// Функция для возврата на первую карту, доступна как для хоста, так и для клиента
-void ALevelTransitionBox::ReturnToFirstMap()
-{
-    
-    PrintString("Trying to return to the first map...");
-    if(!FirstMap.IsEmpty())
-    { 
-
-        if (HasAuthority())  // Если это хост
-        {
-            PrintString("Returning to the first map...");
-            GetWorld()->ServerTravel(FirstMap + TEXT("?listen"));
-        }
-        else//если это клиент
-        {
-            APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
-            if (PC)
-            {
-                PrintString("Client returning to the first map...");
-                PC->ClientTravel(FirstMap, TRAVEL_Absolute);
-            }
-        }
-    }
-    else
-    {
-        PrintString("First map name is empty. Cannot return to the first map.");
-
-    }
-}
 
 void ALevelTransitionBox::PrintString(const FString& Message)
 {
+    FString RoleMessage;
+
+    switch (GetNetMode())
+    {
+    case NM_Client:
+        RoleMessage = "[Client] ";
+        break;
+    case NM_ListenServer:
+    case NM_DedicatedServer:
+        RoleMessage = "[Server] ";
+        break;
+    default:
+        RoleMessage = "[Standalone] ";
+        break;
+    }
     if (GEngine)
     {
         GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Red, Message);
